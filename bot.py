@@ -19,6 +19,7 @@ import time
 import requests
 from bs4 import BeautifulSoup
 from atproto import Client
+from atproto.models.app.bsky.embed.images import Image, Images
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -158,26 +159,19 @@ def post_to_bluesky(fish, img_bytes):
     client = Client()
     client.login(handle, password)
 
-    # Determine image MIME type from URL
-    mime = "image/jpeg"
-    if fish["image_url"]:
-        lower = fish["image_url"].lower()
-        if lower.endswith(".png"):
-            mime = "image/png"
-        elif lower.endswith(".webp"):
-            mime = "image/webp"
-        elif lower.endswith(".gif"):
-            mime = "image/gif"
-
+    # Upload the blob
     upload = client.upload_blob(img_bytes)
+
+    # Build post text and alt text
     text = build_post_text(fish)
     alt_text = fish["title"] or "Fish"
 
-    client.send_image(
-        text=text,
-        image=upload.blob,
-        image_alt=alt_text,
-    )
+    # Create the image record with the uploaded blob
+    image = Image(image=upload.blob, alt=alt_text)
+    images_embed = Images(images=[image])
+
+    # Send the post with the embedded image
+    client.send_post(text=text, embed=images_embed)
     print(f"Posted: {fish['title']} — {fish['url']}")
 
 
