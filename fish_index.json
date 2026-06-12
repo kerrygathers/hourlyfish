@@ -1,0 +1,150 @@
+[
+  {
+    "slug": "/fishes/electrophorus-electricus",
+    "label": "Electric eel"
+  },
+  {
+    "slug": "/fishes/arapaima-gigas",
+    "label": "Arapaima"
+  },
+  {
+    "slug": "/fishes/pygocentrus-nattereri",
+    "label": "Red piranha"
+  },
+  {
+    "slug": "/fishes/potamotrygon-motoro",
+    "label": "Ocellate river stingray"
+  },
+  {
+    "slug": "/fishes/hoplias-malabaricus",
+    "label": "Hoplias malabaricus"
+  },
+  {
+    "slug": "/fishes/thunnus-thynnus",
+    "label": "Atlantic bluefin tuna"
+  },
+  {
+    "slug": "/fishes/conger-conger",
+    "label": "Conger eel"
+  },
+  {
+    "slug": "/fishes/sparus-aurata",
+    "label": "Gilthead seabream"
+  },
+  {
+    "slug": "/fishes/mobula-mobular",
+    "label": "Spinetail devil ray"
+  },
+  {
+    "slug": "/fishes/epinephelus-marginatus",
+    "label": "Dusky grouper"
+  },
+  {
+    "slug": "/fishes/diplodus-sargus",
+    "label": "White seabream"
+  },
+  {
+    "slug": "/fishes/squatina-squatina",
+    "label": "Angelshark"
+  },
+  {
+    "slug": "/fishes/hippocampus-hippocampus",
+    "label": "Short-snouted seahorse"
+  },
+  {
+    "slug": "/fishes/scorpaena-maderensis",
+    "label": "Madeira rockfish"
+  },
+  {
+    "slug": "/fishes/aulostomus-strigosus",
+    "label": "Aulostomus strigosus"
+  },
+  {
+    "slug": "/fishes/isurus-oxyrinchus",
+    "label": "Shortfin mako"
+  },
+  {
+    "slug": "/fishes/sparisoma-cretense",
+    "label": "Parrotfish"
+  },
+  {
+    "slug": "/fishes/acanthurus-coeruleus",
+    "label": "Blue tang surgeonfish"
+  },
+  {
+    "slug": "/fishes/sphyraena-barracuda",
+    "label": "Great barracuda"
+  },
+  {
+    "slug": "/fishes/pomacanthus-paru",
+    "label": "French angelfish"
+  },
+  {
+    "slug": "/fishes/holacanthus-ciliaris",
+    "label": "Queen angelfish"
+  },
+  {
+    "slug": "/fishes/aetobatus-narinari",
+    "label": "Whitespotted eagle ray"
+  },
+  {
+    "slug": "/fishes/centropomus-undecimalis",
+    "label": "Common snook"
+  },
+  {
+    "slug": "/fishes/cephalopholis-miniata",
+    "label": "Miniatus grouper"
+  },
+  {
+    "slug": "/fishes/gymnothorax-javanicus",
+    "label": "Giant moray"
+  },
+  {
+    "slug": "/fishes/pterois-miles",
+    "label": "Devil firefish"
+  },
+  {
+    "slug": "/fishes/cheilinus-undulatus",
+    "label": "Humphead wrasse"
+  },
+  {
+    "slug": "/fishes/taeniura-lymma",
+    "label": "Bluespotted lagoon ray"
+  },
+  {
+    "slug": "/fishes/cheilinus-quinquecinctus",
+    "label": "Whitebarred wrasse"
+  },
+  {
+    "slug": "/fishes/betta-splendens",
+    "label": "Siamese fighting fish"
+  },
+  {
+    "slug": "/fishes/hypostomus-plecostomus",
+    "label": "Suckermouth catfish"
+  },
+  {
+    "slug": "/fishes/corydoras-aeneus",
+    "label": "Bronze corydoras"
+  },
+  {
+    "slug": "/fishes/symphysodon-aequifasciatus",
+    "label": "Blue discus"
+  },
+  {
+    "slug": "/fishes/pterophyllum-scalare",
+    "label": "Freshwater angelfish"
+  },
+  {
+    "slug": "/fishes/poecilia-reticulata",
+    "label": "Guppy"
+  },
+  {
+    "slug": "/fishes/carassius-auratus",
+    "label": "Goldfish"
+  },
+  {
+    "slug": "/fishes/amphiprion-ocellaris",
+    "label": "Clown anemonefish"
+  }
+]
