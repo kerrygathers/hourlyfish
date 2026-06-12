@@ -29,7 +29,12 @@ except ImportError:
 BASE_URL = "https://www.fishi-pedia.com"
 INDEX_FILE = "fish_index.json"
 COUNTER_FILE = "counter.txt"
-HEADERS = {"User-Agent": "HourlyFish/1.0 (educational bot; contact: kerry.gathers@proton.me)"}
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+    "Referer": "https://www.fishi-pedia.com/",
+}
 
 # IUCN status codes → readable labels for the post caption
 IUCN_LABELS = {
@@ -65,8 +70,26 @@ def get_counter(total):
 def fetch_fish_data(slug):
     """Fetch a fish detail page and extract image URL, name, description, and metadata."""
     url = BASE_URL + slug
-    r = requests.get(url, headers=HEADERS, timeout=15)
-    r.raise_for_status()
+    
+    # Retry with delays to handle rate limiting
+    for attempt in range(3):
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=15)
+            r.raise_for_status()
+            break
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 403 and attempt < 2:
+                print(f"Got 403 Forbidden, retrying in {5 * (attempt + 1)} seconds...")
+                time.sleep(5 * (attempt + 1))
+            else:
+                raise
+        except Exception as e:
+            if attempt < 2:
+                print(f"Fetch attempt {attempt + 1} failed: {e}, retrying...")
+                time.sleep(3)
+            else:
+                raise
+    
     soup = BeautifulSoup(r.text, "html.parser")
 
     # Image: og:image is the most reliable source — it's in the HTML head
