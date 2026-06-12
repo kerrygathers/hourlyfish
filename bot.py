@@ -149,8 +149,8 @@ def build_post_text(fish):
 
 def post_to_bluesky(fish, img_bytes):
     """Upload image and post to Bluesky."""
-    handle = os.environ["hourlyfish.bsky.social"]
-    password = os.environ["ivpd-ye4j-bide-sxjc"]
+    handle = os.environ["BSKY_HANDLE"]
+    password = os.environ["BSKY_PASSWORD"]
 
     client = Client()
     client.login(handle, password)
