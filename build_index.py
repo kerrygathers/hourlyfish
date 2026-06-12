@@ -1,9 +1,9 @@
 """
 build_index.py
 --------------
-Run this ONCE to scrape all fish slugs and basic metadata from Fishipedia
-and save them to fish_index.json. Commit that file to your repo so the
-hourly bot never has to crawl the listing pages again.
+Scrape all fish slugs from Fishipedia and save to fish_index.json.
+
+Run this to get the complete fish list before running build_cache.py.
 
 Usage:
     pip install requests beautifulsoup4
@@ -14,73 +14,108 @@ import requests
 from bs4 import BeautifulSoup
 import json
 import time
+import re
 
 BASE_URL = "https://www.fishi-pedia.com"
 LISTING_URL = BASE_URL + "/en/poissons"
-TOTAL_PAGES = 48  # Update this if the site grows
 OUTPUT_FILE = "fish_index.json"
-HEADERS = {"User-Agent": "HourlyFish/1.0 (educational bot; contact: your@email.com)"}
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
 
 
 def scrape_page(page_num):
     """Scrape one listing page and return a list of fish dicts."""
     url = LISTING_URL if page_num == 1 else f"{LISTING_URL}?pg={page_num}"
-    print(f"  Scraping page {page_num}/{TOTAL_PAGES}: {url}")
+    print(f"  Page {page_num}: {url}")
 
-    r = requests.get(url, headers=HEADERS, timeout=15)
-    r.raise_for_status()
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=15)
+        r.raise_for_status()
+    except Exception as e:
+        print(f"    ERROR: {e}")
+        return []
+
     soup = BeautifulSoup(r.text, "html.parser")
-
     fish_list = []
 
-    # Each fish on the listing page has an anchor linking to its detail page.
-    # The slug pattern is /fishes/<latin-name>
-    for link in soup.find_all("a", href=True):
-        href = link["href"]
-        if "/fishes/" in href and href.startswith(BASE_URL + "/fishes/"):
-            slug = href.replace(BASE_URL, "")
+    # Look for fish detail page links in the page
+    # Try multiple selectors to find fish cards/links
+    
+    # Common patterns: href="/fishes/LATIN-NAME"
+    links = soup.find_all("a", href=re.compile(r"^/fishes/[a-z\-]+$"))
+    
+    print(f"    Found {len(links)} potential fish links")
 
-            # Skip category pages like /fishes/type/... or /fishes/famille/...
-            parts = slug.split("/")
-            if len(parts) != 3:
-                continue
-
-            # Grab the text inside the link for a rough common name
-            text = link.get_text(separator=" ", strip=True)
-
-            # Avoid duplicates (same slug may appear multiple times per page)
-            if not any(f["slug"] == slug for f in fish_list):
+    seen = set()
+    for link in links:
+        href = link.get("href", "").strip()
+        
+        # Extract just the slug
+        if href.startswith("/fishes/") and "-" in href:
+            slug = href
+            
+            # Get the display text
+            text = link.get_text(strip=True)
+            
+            if slug not in seen and text:
+                seen.add(slug)
                 fish_list.append({
                     "slug": slug,
-                    "label": text[:120] if text else slug.split("/")[-1]
+                    "label": text[:120]
                 })
 
+    print(f"    Added {len(fish_list)} unique fish")
     return fish_list
 
 
 def main():
+    print("Scraping all fish from Fishipedia...")
+    print(f"Target: {LISTING_URL}\n")
+
     all_fish = []
     seen_slugs = set()
+    page = 1
+    consecutive_empty = 0
 
-    for page in range(1, TOTAL_PAGES + 1):
-        try:
-            fish_on_page = scrape_page(page)
+    # Try pages until we hit 3 consecutive empty pages
+    while consecutive_empty < 3:
+        fish_on_page = scrape_page(page)
+        
+        if not fish_on_page:
+            consecutive_empty += 1
+            print(f"  (empty page #{consecutive_empty})\n")
+        else:
+            consecutive_empty = 0
             for fish in fish_on_page:
                 if fish["slug"] not in seen_slugs:
                     all_fish.append(fish)
                     seen_slugs.add(fish["slug"])
-            # Be polite — don't hammer the server
-            time.sleep(1.5)
-        except Exception as e:
-            print(f"  ERROR on page {page}: {e}")
-            continue
+        
+        page += 1
+        time.sleep(1)  # Be polite
 
-    print(f"\nTotal fish collected: {len(all_fish)}")
+    print(f"\n{'='*60}")
+    print(f"Total fish scraped: {len(all_fish)}")
+    print(f"{'='*60}\n")
 
+    if len(all_fish) == 0:
+        print("ERROR: No fish found! The site structure may have changed.")
+        print("Check that:")
+        print("  1. The listing URL is correct")
+        print("  2. The site isn't blocking scrapers")
+        print("  3. The HTML selectors still match")
+        return
+
+    # Save to file
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         json.dump(all_fish, f, ensure_ascii=False, indent=2)
 
-    print(f"Saved to {OUTPUT_FILE}")
+    print(f"✓ Saved {len(all_fish)} fish to {OUTPUT_FILE}")
+    print(f"\nNext: Run 'python build_cache.py' to fetch detailed data")
 
 
 if __name__ == "__main__":
