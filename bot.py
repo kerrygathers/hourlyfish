@@ -10,7 +10,7 @@ Required environment variables (set as GitHub Secrets):
     BSKY_PASSWORD — an App Password from Bluesky settings (not your real password)
 
 Dependencies:
-    pip install requests beautifulsoup4 atproto
+    pip install requests beautifulsoup4 atproto python-dotenv
 """
 
 import os
@@ -19,10 +19,12 @@ import time
 import requests
 from bs4 import BeautifulSoup
 from atproto import Client
-from atproto.models.app.bsky.embed.images import Image, Images
 
-from dotenv import load_dotenv
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 BASE_URL = "https://www.fishi-pedia.com"
 INDEX_FILE = "fish_index.json"
@@ -166,12 +168,18 @@ def post_to_bluesky(fish, img_bytes):
     text = build_post_text(fish)
     alt_text = fish["title"] or "Fish"
 
-    # Create the image record with the uploaded blob
-    image = Image(image=upload.blob, alt=alt_text)
-    images_embed = Images(images=[image])
-
-    # Send the post with the embedded image
-    client.send_post(text=text, embed=images_embed)
+    # Send the post with the uploaded image using the image embedding
+    client.send_post(
+        text=text,
+        embed=client.models.AppBskyEmbedImages.Main(
+            images=[
+                client.models.AppBskyEmbedImages.Image(
+                    image=upload.blob,
+                    alt=alt_text,
+                )
+            ]
+        ),
+    )
     print(f"Posted: {fish['title']} — {fish['url']}")
 
 
