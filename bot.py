@@ -31,8 +31,16 @@ INDEX_FILE = "fish_index.json"
 COUNTER_FILE = "counter.txt"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.5",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "DNT": "1",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Cache-Control": "max-age=0",
     "Referer": "https://www.fishi-pedia.com/",
 }
 
@@ -47,6 +55,21 @@ IUCN_LABELS = {
     "EX": "Extinct ⬛",
     "DD": "Data Deficient ❓",
 }
+
+# Create a persistent session with retries
+session = requests.Session()
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+retry_strategy = Retry(
+    total=5,
+    backoff_factor=2,
+    status_forcelist=[429, 500, 502, 503, 504],
+    allowed_methods=["GET", "HEAD"]
+)
+adapter = HTTPAdapter(max_retries=retry_strategy)
+session.mount("http://", adapter)
+session.mount("https://", adapter)
 
 
 def load_index():
@@ -71,22 +94,31 @@ def fetch_fish_data(slug):
     """Fetch a fish detail page and extract image URL, name, description, and metadata."""
     url = BASE_URL + slug
     
-    # Retry with delays to handle rate limiting
-    for attempt in range(3):
+    # Retry with increasing delays to handle rate limiting and 403 errors
+    max_retries = 4
+    for attempt in range(max_retries):
         try:
-            r = requests.get(url, headers=HEADERS, timeout=15)
+            print(f"Fetching {url} (attempt {attempt + 1}/{max_retries})...")
+            r = session.get(url, headers=HEADERS, timeout=20)
             r.raise_for_status()
+            print("✓ Successfully fetched page")
             break
         except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 403 and attempt < 2:
-                print(f"Got 403 Forbidden, retrying in {5 * (attempt + 1)} seconds...")
-                time.sleep(5 * (attempt + 1))
+            if e.response.status_code == 403:
+                if attempt < max_retries - 1:
+                    wait_time = (attempt + 1) * 15  # 15s, 30s, 45s, 60s
+                    print(f"Got 403 Forbidden, waiting {wait_time}s before retry...")
+                    time.sleep(wait_time)
+                else:
+                    print(f"Failed with 403 after {max_retries} attempts")
+                    raise
             else:
                 raise
         except Exception as e:
-            if attempt < 2:
-                print(f"Fetch attempt {attempt + 1} failed: {e}, retrying...")
-                time.sleep(3)
+            if attempt < max_retries - 1:
+                wait_time = (attempt + 1) * 10
+                print(f"Request failed: {e}, waiting {wait_time}s before retry...")
+                time.sleep(wait_time)
             else:
                 raise
     
@@ -134,15 +166,21 @@ def fetch_fish_data(slug):
 
 def download_image(image_url):
     """Download image bytes, with a retry."""
-    for attempt in range(3):
+    for attempt in range(4):
         try:
-            r = requests.get(image_url, headers=HEADERS, timeout=20)
+            print(f"Downloading image (attempt {attempt + 1}/4)...")
+            r = session.get(image_url, headers=HEADERS, timeout=25)
             r.raise_for_status()
+            print("✓ Image downloaded successfully")
             return r.content
         except Exception as e:
-            print(f"Image download attempt {attempt + 1} failed: {e}")
-            time.sleep(2)
-    raise RuntimeError(f"Failed to download image after 3 attempts: {image_url}")
+            if attempt < 3:
+                wait_time = (attempt + 1) * 5
+                print(f"Image download failed: {e}, waiting {wait_time}s before retry...")
+                time.sleep(wait_time)
+            else:
+                raise
+    raise RuntimeError(f"Failed to download image after 4 attempts: {image_url}")
 
 
 def build_post_text(fish):
@@ -203,7 +241,7 @@ def post_to_bluesky(fish, img_bytes):
 
     # Send the post
     client.send_post(text=text, embed=image_embed)
-    print(f"Posted: {fish['title']} — {fish['url']}")
+    print(f"✓ Posted: {fish['title']} — {fish['url']}")
 
 
 def main():
@@ -218,7 +256,7 @@ def main():
     fish = fetch_fish_data(entry["slug"])
 
     if not fish["image_url"]:
-        print("No image found — skipping this fish.")
+        print("⚠ No image found — skipping this fish.")
         return
 
     img_bytes = download_image(fish["image_url"])
