@@ -20,6 +20,9 @@ import requests
 from bs4 import BeautifulSoup
 from atproto import Client
 
+from dotenv import load_dotenv
+load_dotenv()
+
 BASE_URL = "https://www.fishi-pedia.com"
 INDEX_FILE = "fish_index.json"
 COUNTER_FILE = "counter.txt"
