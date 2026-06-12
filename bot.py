@@ -19,6 +19,7 @@ import time
 import requests
 from bs4 import BeautifulSoup
 from atproto import Client
+from atproto_core import models
 
 try:
     from dotenv import load_dotenv
@@ -168,23 +169,28 @@ def post_to_bluesky(fish, img_bytes):
     text = build_post_text(fish)
     alt_text = fish["title"] or "Fish"
 
-    # Send the post with the uploaded image using create_record (lower-level API)
+    # Create the image embed record
+    image_embed = models.AppBskyEmbedImages.Main(
+        images=[
+            models.AppBskyEmbedImages.Image(
+                image=upload.blob,
+                alt=alt_text,
+            )
+        ]
+    )
+
+    # Create the post record
+    post_record = models.AppBskyFeedPost.Record(
+        text=text,
+        created_at=client.get_current_time_iso(),
+        embed=image_embed,
+    )
+
+    # Send the post
     client.com.atproto.repo.create_record(
         repo=client.me.did,
         collection="app.bsky.feed.post",
-        record={
-            "text": text,
-            "createdAt": client.get_current_time_iso(),
-            "embed": {
-                "$type": "app.bsky.embed.images",
-                "images": [
-                    {
-                        "image": upload.blob,
-                        "alt": alt_text,
-                    }
-                ],
-            },
-        },
+        record=post_record,
     )
     print(f"Posted: {fish['title']} — {fish['url']}")
 
