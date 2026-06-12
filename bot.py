@@ -168,17 +168,23 @@ def post_to_bluesky(fish, img_bytes):
     text = build_post_text(fish)
     alt_text = fish["title"] or "Fish"
 
-    # Send the post with the uploaded image using the image embedding
-    client.send_post(
-        text=text,
-        embed=client.models.AppBskyEmbedImages.Main(
-            images=[
-                client.models.AppBskyEmbedImages.Image(
-                    image=upload.blob,
-                    alt=alt_text,
-                )
-            ]
-        ),
+    # Send the post with the uploaded image using create_record (lower-level API)
+    client.com.atproto.repo.create_record(
+        repo=client.me.did,
+        collection="app.bsky.feed.post",
+        record={
+            "text": text,
+            "createdAt": client.get_current_time_iso(),
+            "embed": {
+                "$type": "app.bsky.embed.images",
+                "images": [
+                    {
+                        "image": upload.blob,
+                        "alt": alt_text,
+                    }
+                ],
+            },
+        },
     )
     print(f"Posted: {fish['title']} — {fish['url']}")
 
