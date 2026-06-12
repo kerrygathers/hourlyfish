@@ -2,7 +2,7 @@
 bot.py
 ------
 Run hourly (via GitHub Actions cron) to post one fish to Bluesky.
-Reads the next fish from fish_index.json, fetches its detail page,
+Reads the next fish from fish_index.json, looks up cached data from fish_cache.json,
 downloads its image, and posts with a caption to Bluesky.
 
 Required environment variables (set as GitHub Secrets):
@@ -11,13 +11,15 @@ Required environment variables (set as GitHub Secrets):
 
 Dependencies:
     pip install requests beautifulsoup4 atproto python-dotenv
+
+Note: Run build_cache.py occasionally to refresh fish_cache.json with the latest
+data from fishi-pedia.com.
 """
 
 import os
 import json
 import time
 import requests
-from bs4 import BeautifulSoup
 from atproto import Client, models
 
 try:
@@ -28,19 +30,13 @@ except ImportError:
 
 BASE_URL = "https://www.fishi-pedia.com"
 INDEX_FILE = "fish_index.json"
+CACHE_FILE = "fish_cache.json"
 COUNTER_FILE = "counter.txt"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+    "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
     "Accept-Encoding": "gzip, deflate, br",
-    "DNT": "1",
-    "Connection": "keep-alive",
-    "Upgrade-Insecure-Requests": "1",
-    "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "none",
-    "Cache-Control": "max-age=0",
     "Referer": "https://www.fishi-pedia.com/",
 }
 
@@ -56,25 +52,22 @@ IUCN_LABELS = {
     "DD": "Data Deficient ❓",
 }
 
-# Create a persistent session with retries
+# Create a persistent session for image downloads
 session = requests.Session()
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-
-retry_strategy = Retry(
-    total=5,
-    backoff_factor=2,
-    status_forcelist=[429, 500, 502, 503, 504],
-    allowed_methods=["GET", "HEAD"]
-)
-adapter = HTTPAdapter(max_retries=retry_strategy)
-session.mount("http://", adapter)
-session.mount("https://", adapter)
 
 
 def load_index():
     with open(INDEX_FILE, encoding="utf-8") as f:
         return json.load(f)
+
+
+def load_cache():
+    try:
+        with open(CACHE_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print(f"⚠ {CACHE_FILE} not found. Run build_cache.py first.")
+        return {}
 
 
 def get_counter(total):
@@ -90,82 +83,8 @@ def get_counter(total):
     return idx
 
 
-def fetch_fish_data(slug):
-    """Fetch a fish detail page and extract image URL, name, description, and metadata."""
-    url = BASE_URL + slug
-    
-    # Retry with increasing delays to handle rate limiting and 403 errors
-    max_retries = 4
-    for attempt in range(max_retries):
-        try:
-            print(f"Fetching {url} (attempt {attempt + 1}/{max_retries})...")
-            r = session.get(url, headers=HEADERS, timeout=20)
-            r.raise_for_status()
-            print("✓ Successfully fetched page")
-            break
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 403:
-                if attempt < max_retries - 1:
-                    wait_time = (attempt + 1) * 15  # 15s, 30s, 45s, 60s
-                    print(f"Got 403 Forbidden, waiting {wait_time}s before retry...")
-                    time.sleep(wait_time)
-                else:
-                    print(f"Failed with 403 after {max_retries} attempts")
-                    raise
-            else:
-                raise
-        except Exception as e:
-            if attempt < max_retries - 1:
-                wait_time = (attempt + 1) * 10
-                print(f"Request failed: {e}, waiting {wait_time}s before retry...")
-                time.sleep(wait_time)
-            else:
-                raise
-    
-    soup = BeautifulSoup(r.text, "html.parser")
-
-    # Image: og:image is the most reliable source — it's in the HTML head
-    image_url = None
-    og_image = soup.find("meta", property="og:image")
-    if og_image and og_image.get("content"):
-        image_url = og_image["content"]
-
-    # Title: "Common name • Latin name • Fish sheet"
-    raw_title = ""
-    og_title = soup.find("meta", property="og:title")
-    if og_title and og_title.get("content"):
-        raw_title = og_title["content"].replace(" • Fish sheet", "").strip()
-
-    # Description: og:description or meta description
-    description = ""
-    og_desc = soup.find("meta", property="og:description")
-    if og_desc and og_desc.get("content"):
-        description = og_desc["content"].strip()
-    if not description:
-        meta_desc = soup.find("meta", attrs={"name": "description"})
-        if meta_desc and meta_desc.get("content"):
-            description = meta_desc["content"].strip()
-
-    # IUCN status: look for a short badge text on the page
-    iucn_code = ""
-    for tag in soup.find_all(class_=lambda c: c and "iucn" in c.lower()):
-        text = tag.get_text(strip=True).upper()
-        if text in IUCN_LABELS:
-            iucn_code = text
-            break
-
-    return {
-        "url": url,
-        "slug": slug,
-        "title": raw_title,
-        "image_url": image_url,
-        "description": description,
-        "iucn_code": iucn_code,
-    }
-
-
 def download_image(image_url):
-    """Download image bytes, with a retry."""
+    """Download image bytes from the provided URL."""
     for attempt in range(4):
         try:
             print(f"Downloading image (attempt {attempt + 1}/4)...")
@@ -175,8 +94,8 @@ def download_image(image_url):
             return r.content
         except Exception as e:
             if attempt < 3:
-                wait_time = (attempt + 1) * 5
-                print(f"Image download failed: {e}, waiting {wait_time}s before retry...")
+                wait_time = (attempt + 1) * 3
+                print(f"Download failed: {e}, retrying in {wait_time}s...")
                 time.sleep(wait_time)
             else:
                 raise
@@ -187,22 +106,23 @@ def build_post_text(fish):
     """Build the Bluesky post caption (max 300 chars)."""
     lines = []
 
-    if fish["title"]:
+    if fish.get("title"):
         lines.append(fish["title"])
 
-    if fish["iucn_code"]:
+    if fish.get("iucn_code"):
         label = IUCN_LABELS.get(fish["iucn_code"], fish["iucn_code"])
         lines.append(f"Conservation status: {label}")
 
-    if fish["description"]:
+    if fish.get("description"):
         # Trim description to leave room for URL
-        max_desc = 200 - len(fish["url"]) - 30
+        max_desc = 200 - len(fish["slug"]) - 30
         desc = fish["description"]
         if len(desc) > max_desc:
             desc = desc[:max_desc].rsplit(" ", 1)[0] + "…"
         lines.append(desc)
 
-    lines.append(f"🔗 {fish['url']}")
+    url = BASE_URL + fish["slug"]
+    lines.append(f"🔗 {url}")
     lines.append("#fish")
 
     text = "\n\n".join(lines)
@@ -227,7 +147,7 @@ def post_to_bluesky(fish, img_bytes):
 
     # Build post text and alt text
     text = build_post_text(fish)
-    alt_text = fish["title"] or "Fish"
+    alt_text = fish.get("title") or "Fish"
 
     # Create the image embed
     image_embed = models.AppBskyEmbedImages.Main(
@@ -241,24 +161,36 @@ def post_to_bluesky(fish, img_bytes):
 
     # Send the post
     client.send_post(text=text, embed=image_embed)
-    print(f"✓ Posted: {fish['title']} — {fish['url']}")
+    print(f"✓ Posted: {fish.get('title', fish['slug'])} — {BASE_URL + fish['slug']}")
 
 
 def main():
+    # Load fish index and cache
     fish_list = load_index()
     if not fish_list:
         raise RuntimeError(f"{INDEX_FILE} is empty. Run build_index.py first.")
 
+    cache = load_cache()
+    if not cache:
+        raise RuntimeError(f"{CACHE_FILE} is empty. Run build_cache.py first.")
+
+    # Get the current fish to post
     idx = get_counter(len(fish_list))
     entry = fish_list[idx]
-    print(f"Posting fish #{idx}: {entry['slug']}")
+    slug = entry["slug"]
+    print(f"Posting fish #{idx}: {slug}")
 
-    fish = fetch_fish_data(entry["slug"])
+    # Look up fish data in cache
+    if slug not in cache:
+        raise RuntimeError(f"Fish {slug} not in cache. Run build_cache.py to update.")
 
-    if not fish["image_url"]:
+    fish = cache[slug]
+
+    if not fish.get("image_url"):
         print("⚠ No image found — skipping this fish.")
         return
 
+    # Download and post
     img_bytes = download_image(fish["image_url"])
     post_to_bluesky(fish, img_bytes)
 
